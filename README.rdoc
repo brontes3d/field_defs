@@ -1,0 +1,118 @@
+===Let's start simple.
+
+Suppose we have a model User which relates to another model Group.  (<tt>belongs_to :group</tt>)
+
+Now suppose we have a listing of all the users... it might look like this
+
+	<% users.each do |user| %>
+		Name: <%=user.name%>
+		Group: <%=user.group.name%>
+	<% end %>
+	
+Nothing wrong with that really, but it would feel better to me if the decision about how to describe which group a user is in (<tt>user.group.name</tt>) wasn't made here.  Today it's "show the group's name", but tomorrow it might be "show the name of the group and it's ID".
+
+And this is just a listing of users.  What if we have a view for a single user.  What if we have a special view for users that like the color purple.  Are all of these views going to have to call <tt>user.group.name</tt>?  I'd like to be able to change this logic without modifying all these views.  The simplest solution that comes to mind, is to make a new method on user:
+
+	def group_name
+		self.group.name
+	end
+
+And hey, now we can come up with something nice to say if a user isn't in a group
+
+	def group_name
+		if self.group
+			self.group.name
+		else
+			"(none)"
+		end
+	end
+	
+Of course our view changes to be:
+
+	<% users.each do |user| %>
+		Name: <%=user.name%>
+		Group: <%=user.group_name%>
+	<% end %>
+
+Ok, great... I'm happy... but suppose we repeat that process a few dozen times, with more model methods that abbreviate things we commonly display on user.  things like:
+	
+	display_name
+	title_first_name_and_last_name
+	last_name_comma_first_name
+	formatted_birthday
+	number_of_friends
+	
+None of the things are columns on the user table, they are sorta-calculated / sorta-formatted *fields* on User.
+
+And displaying isn't really the only thing we'd like to be able to do with fields.
+
+We'd also like to be able to set them, and retrieve their values as json, and be able to tell which ones we should show in search results, and sometimes even set them.
+
+It's not an obvious concept, 
+* that these things called *fields* should all be defined separately... 
+* that they should have attributes that describe things about them...
+* that there should be a single place to describe how to write, retrieve, display, or sort every possible field on my BigFatModel.  
+
+But once I had field_defs, I just couldn't stop finding more meta-data-type-things about my model's fields that I just had to have defined. Defined concisely. Defined with practical defaults. and Defined all-in-one-place.
+
+===FieldDefs
+
+With FieldDefs, we wouldn't define that method group_name... we would define a field for group.  It might look something like this:
+
+	field(:group).human_name('Group').display_proc do |group| 
+		group ? group.name : "(none)"
+	end.label(:listing)
+
+And we wouldn't define the user listing like that either.  It would probably look like this:
+
+ 	<% 
+	listing_fields = User.field_defs.fields_labeled(:listing)
+	users.each do |user| 
+		listing_fields.each do |field|
+		%>
+			<%=field.human_name%>: <%=field.display_proc.call(field.reader_proc.call(user))%>
+		<% 
+		end
+	end 
+	%>
+	
+Ok, I'll admit it.... This is a poor example.  But that's because it's simple.  What we've done here is abstracted the job of defining how to retrieve and display fields on User. And abstracted the job of determining which fields to display in the users listing.  And if you can imagine dozens of fields on User, and dozens of different views for Users, it starts to make a lot more sense.
+
+===Finally, FieldDefs is...
+
+A framework for defining concrete logic for the abstract notion of the 'fields' available for a particular model. Typically these fields are database columns, but can often be calculated attributes or things pulled in from related entities.  Defining your model's fields provides the rest of your application with consistent interface for performing operations on a set of your models fields without having to define extra logic to handle the special cases. It allows you to <b>define all of the special case logic in your model's FieldDefs</b>.
+
+===It does so by...
+
+Providing a framework for defining default and custom behavior for various types of 'things' on each of your model's fields.
+
+I wish we had a better name than 'things', But it might help to know that we categorize the things as:
+* arg_type
+* proc_type
+* mixed_type
+(see: FieldDefs.default_for_arg_type , FieldDefs.default_for_proc_type , FieldDefs.default_for_mixed_type)
+
+And although you can define your own arbitrary 'things' the defaults provided by FieldDefs are:
+* display_proc
+* writer_proc
+* reader_proc
+* human_name
+And also
+* label
+But label is kinda special in the way it behaves, it's not one of the 3 types of things.
+
+(see: FieldDefs::Field )
+
+==== Conclusion
+
+The best examples of why you might want to use FieldDefs, can actually be found in the other plugins that make use of it:
+* fields_audited
+* yui_datatable
+
+(TODO: release these other plugin and then link to their rdoc in this rdoc)
+
+
+
+Copyright (c) 2008-2010 3M. All rights reserved. Released under the MIT license.
+
+Authored by Jacob Burkhart.
